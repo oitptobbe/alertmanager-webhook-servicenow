@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	serviceNowBaseURL   = "https://%s.service-now.com"
+	serviceNowBaseURL   = "https://%s"
 	tableAPI            = "%s/api/now/v2/table/%s"
 	hibernatingInstance = "Hibernating Instance"
 )
