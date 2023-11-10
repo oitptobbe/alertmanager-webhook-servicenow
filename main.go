@@ -371,7 +371,10 @@ func onResolvedGroup(data template.Data, updatableIncident Incident) error {
 	}
 
 	incidentUpdateParam := filterForUpdate(incidentCreateParam)
-
+	incidentUpdateParam["close_code"] = "Closed/Resolved by caller"
+	incidentUpdateParam["state"] = 7
+	incidentUpdateParam["close_notes"] = "Closed by Alertmanager API"
+	
 	if updatableIncident == nil {
 		log.Infof("Found no updatable incident for resolved alert group key: %s. No incident will be created/updated.", getGroupKey(data))
 	} else {
