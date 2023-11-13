@@ -394,7 +394,7 @@ func onResolvedGroup(data template.Data, updatableIncident Incident) error {
 			return err
 		}
 	}
-	return updatableIncident, nil
+	return nil
 }
 
 func alertGroupToIncident(data template.Data, updatableIncident Incident) (Incident, error) {
