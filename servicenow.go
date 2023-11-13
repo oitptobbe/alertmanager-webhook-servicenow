@@ -10,12 +10,12 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-
+	"crypto/tls"
 	"github.com/prometheus/common/log"
 )
 
 const (
-	serviceNowBaseURL   = "https://%s.service-now.com"
+	serviceNowBaseURL   = "https://%s"
 	tableAPI            = "%s/api/now/v2/table/%s"
 	hibernatingInstance = "Hibernating Instance"
 )
@@ -87,7 +87,7 @@ func NewServiceNowClient(instanceName string, userName string, password string) 
 	if password == "" {
 		return nil, errors.New("Missing password")
 	}
-
+	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	return &ServiceNowClient{
 		baseURL:    fmt.Sprintf(serviceNowBaseURL, instanceName),
 		authHeader: fmt.Sprintf("Basic %s", base64.URLEncoding.EncodeToString([]byte(userName+":"+password))),
@@ -152,7 +152,7 @@ func (snClient *ServiceNowClient) doRequest(req *http.Request) ([]byte, error) {
 	serviceNowLastRequest.SetToCurrentTime()
 
 	if resp.StatusCode >= 400 {
-		errorMsg := fmt.Sprintf("ServiceNow returned the HTTP error code: %v", resp.StatusCode)
+		errorMsg := fmt.Sprintf("ServiceNow returned the HTTP error code: %v - URI: %s Method: %s Body: %s", resp.StatusCode, req.URL.RequestURI(), req.Method,resp.Body)
 		log.Error(errorMsg)
 		return nil, errors.New(errorMsg)
 	}
@@ -226,6 +226,34 @@ func (snClient *ServiceNowClient) GetIncidents(tableName string, params map[stri
 
 // UpdateIncident will update an incident in ServiceNow from a given Incident, and return the updated incident
 func (snClient *ServiceNowClient) UpdateIncident(tableName string, incidentParam Incident, sysID string) (Incident, error) {
+	log.Infof("Update %v field(s) of ServiceNow incident with id : %s", len(incidentParam), sysID)
+
+	postBody, err := json.Marshal(incidentParam)
+	if err != nil {
+		log.Errorf("Error while marshalling the incident. %s", err)
+		return nil, err
+	}
+
+	response, err := snClient.update(tableName, postBody, sysID)
+	if err != nil {
+		log.Errorf("Error while updating the incident. %s", err)
+		return nil, err
+	}
+
+	incidentResponse := IncidentResponse{}
+	err = json.Unmarshal(response, &incidentResponse)
+	if err != nil {
+		log.Errorf("Error while unmarshalling the incident. %s", err)
+		return nil, err
+	}
+
+	updatedIncident := incidentResponse.GetResult()
+	log.Infof("Incident %s updated", updatedIncident.GetNumber())
+
+	return updatedIncident, nil
+}
+
+func (snClient *ServiceNowClient) ResolveIncident(tableName string, incidentParam Incident, sysID string) (Incident, error) {
 	log.Infof("Update %v field(s) of ServiceNow incident with id : %s", len(incidentParam), sysID)
 
 	postBody, err := json.Marshal(incidentParam)

@@ -106,6 +106,7 @@ type WorkflowConfig struct {
 	IncidentGroupKeyField string        `yaml:"incident_group_key_field"`
 	NoUpdateStates        []json.Number `yaml:"no_update_states"`
 	IncidentUpdateFields  []string      `yaml:"incident_update_fields"`
+        ResolveOnResolve      bool          `yaml:"resolve_on_resolve"`
 }
 
 // JSONResponse is the Webhook http response
@@ -263,6 +264,18 @@ func loadConfigContent(configData []byte) (Config, error) {
 	for _, f := range config.Workflow.IncidentUpdateFields {
 		incidentUpdateFields[f] = true
 	}
+	// Load additional configuration settings
+    	config.ResolveOnResolve = true // Default value
+    	if resolveOnResolve, ok := configData["resolve_on_resolve"]; ok {
+        	config.ResolveOnResolve = resolveOnResolve.(bool)
+    	}
+
+    loadEnvVars(&config)
+
+    err = config.validate()
+    if err != nil {
+        return config, err
+    }
 	log.Info("ServiceNow config loaded")
 	return config, nil
 }
@@ -371,17 +384,25 @@ func onResolvedGroup(data template.Data, updatableIncident Incident) error {
 	}
 
 	incidentUpdateParam := filterForUpdate(incidentCreateParam)
-
+	// 3. Check if there is an updatable incident
 	if updatableIncident == nil {
 		log.Infof("Found no updatable incident for resolved alert group key: %s. No incident will be created/updated.", getGroupKey(data))
 	} else {
-		log.Infof("Found updatable incident (%s), with state %s, for resolved alert group key: %s", updatableIncident.GetNumber(), updatableIncident.GetState(), getGroupKey(data))
-		if _, err := serviceNow.UpdateIncident(config.ServiceNow.TableName, incidentUpdateParam, updatableIncident.GetSysID()); err != nil {
+		// 4. Check if resolving incidents on resolve is enabled in the configuration
+		if config.Workflow.ResolveOnResolve {
+		    // 5. Update the existing incident in ServiceNow
+		    incidentUpdateParam["close_code"] = "Closed/Resolved by caller"
+		    incidentUpdateParam["state"] = 7
+		    incidentUpdateParam["close_notes"] = "Closed by Alertmanager API"
+		    log.Infof("Found updatable incident (%s), with state %s, for resolved alert group key: %s", updatableIncident.GetNumber(), updatableIncident.GetState(), getGroupKey(data))
+		    if _, err := serviceNow.UpdateIncident(config.ServiceNow.TableName, incidentUpdateParam, updatableIncident.GetSysID()); err != nil {
 			serviceNowError.Inc()
 			return err
+		    }
+		} else {
+		    log.Infof("ResolveOnResolve is disabled. No resolution will be performed for incident: %s", updatableIncident.GetNumber())
 		}
 	}
-	return nil
 }
 
 func alertGroupToIncident(data template.Data, updatableIncident Incident) (Incident, error) {
