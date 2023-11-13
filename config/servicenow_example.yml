@@ -8,6 +8,9 @@ workflow:
   incident_group_key_field: "CHANGE_ME"
   no_update_states: [6,7,8]
   incident_update_fields: ["comments"]
+  close_code: "Closed/Resolved by caller"
+  close_state: 6
+  close_notes: "Resolved by Alertmanager API"
 
 default_incident:
   assignment_group: "{{.CommonAnnotations.assignment_group}}"
@@ -21,3 +24,4 @@ default_incident:
   short_description: "Alerts from group: {{ range $key, $val := .GroupLabels}}{{ $key }}:{{ $val }} {{end}}"
   subcategory: "Missing Part"
   urgency: "{{.CommonAnnotations.urgency}}"
+
